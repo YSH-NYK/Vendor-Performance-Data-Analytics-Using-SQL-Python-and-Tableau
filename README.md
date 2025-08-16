@@ -16,7 +16,7 @@ This project analyzes retail & wholesale data to provide insights into:
 
 ---
 
-## 📂 Dataset  
+## 📂 Dataset  (https://drive.google.com/drive/folders/1erbLbZfkdrBo5fBNuPR1sFVMkdXnivg7)
 The dataset contains purchase, sales, and vendor information:  
 
 - **purchase_price** → Price at which brands were purchased from vendors (actual brand price).  
