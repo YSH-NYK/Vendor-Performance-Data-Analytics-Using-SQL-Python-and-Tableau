@@ -1,0 +1,155 @@
+Dataset - https://drive.google.com/drive/folders/1erbLbZfkdrBo5fBNuPR1sFVMkdXnivg7
+
+**Problem Statement** 
+
+Effective inventory and sales management are critical for optimizing profitability in the retail and wholesale industry. Companies need to ensure that they are not incurring losses due to inefficient pricing, poor inventory turnover, or vendor dependency. The goal of this analysis is to:
+
+Identify underperforming brands that require promotion or pricing adjustment
+Eg: Flipkart has a certain brand/product whose sales are less, so will require promotion ads or lower pricing
+
+Identifying top vendors contributing in gross profit
+
+Impact of bulk purchase
+Eg: If Flipkart purchases X product (10,000 units) at ₹8k each, instead of buying 2,000 units at ₹8.5k each,
+This ₹500 will profit it when each unit of X is sold by Flipkart at ₹9k or above.
+
+Inventory turnover to reduce holding cost & improve efficiency
+Eg: Flipkart has a T-shirt stock which is tracked monthly.
+If this stock is kept for long in inventory, it increases holding cost.
+Flipkart can open offers on these T-shirts.
+
+
+**Table Info**
+
+1. purchase_price  - the price at which brand was purchased by vendors and also actual price of brand.
+2. purchases - details of purchases made by vendors, including brand purchased by vendors, quantities and amount paid for each purchase with dates
+3. purchase price column which is derived from purchase_price table in purchases shows the price vendor purchased the brand 
+4. vendor invoice - has aggreagate values like quantity and total spent (dollar) of each purchases by vendors
+4. begin_inventory -  store and brand vise inventory at start of 20204
+5. end_inventory -  store and brand vise inventory at end of 20204
+6. sales -  quantity sold, transaction detail of sold brand, selling price of each selled brand by vendors 
+
+
+**How i went** 
+
+Step 1 (Data collection)- 
+
+Got Dataset(csv files) of purchases and sales data of different vendors from internet
+4 files (purchase, purchase_price, sales, vendor_invoice)
+
+Step 2 (Db ingestion)-
+
+Created a script to transfer csv data into sqlite database
+using 
+engine = create_engine('sqlite:///Data/inventory.db')
+df.to_sql(table_name, con = engine, if_exists = 'replace', index = False)
+
+step 3 (logging)-
+
+used loggings for keeping logs of each scripts
+import logging
+
+logging.basicConfig(
+    filename = "logs/Overall_logs.log",
+    level = logging.DEBUG,
+    format = "%(asctime)s-%(levelname)s - %(message)s",
+    filemode = "a"
+)
+
+logging.info("-------Insertiion Complete-------")
+
+step 4 ( inital EDA using SQL)- 
+
+Explored the Database (all 4 tables)(EDA 1)
+understood what each table does
+relation between tables
+
+step 5 (Feature selection )-
+    
+    created a new table in Db which had column which i needed for solution from all 4 tables also added new columns like Gross profit , SalesPurchaseRatio, StockTurnover
+    inserted new table in db 
+	df['GrossProfit'] = df['TotalSalesDollars'] - df['TotalPurchaseDollars']
+    df['ProfitMargin'] = (df['GrossProfit'] / df['TotalSalesDollars'])*100
+    df['StockTurnover'] = df['TotalSalesQuantity'] / df['TotalPurchaseQuantity']
+    df['SalesToPurchaseRatio'] = df['TotalSalesDollars'] / df['TotalPurchaseDollars']
+
+step 6 (Final Eda)- 
+        Exploration Data analysis of new Table data explicitly for data 
+	
+	1. Negative & Zero Values:
+
+	Gross Profit: Minimum value is -52,002.78, indicating losses. Some products or transactions may be selling at a loss due to high 	costs or selling at discounts lower than the purchase price.
+
+	Profit Margin: Has a minimum of -∞, which suggests cases where revenue is zero or even lower than costs.
+
+	Total Sales Quantity & Sales Dollars: Minimum values are 0, meaning some products were purchased but never sold. These could be 	slow-moving or obsolete stock.
+
+	2. Outliers Indicated using boxplot
+
+	Purchase & Actual Prices: The max values (5,681.81 & 7,499.99) are significantly higher than the mean (24.39 & 35.64), indicating 	potential premium products.
+
+	Freight Cost: Huge variation, from 0.09 to 257,032.07, suggests logistics inefficiencies or bulk shipments.
+
+	Stock Turnover: Ranges from 0 to 274.5, implying some products sell extremely fast while others remain in stock indefinitely. 	Value more than 1 indicates that sold quantity for that product is higher than purchased quantity due to either sales are being 	fulfilled from older stock.
+	
+	fiter outliers using -  where GrossProfit > 0 and ProfitMargin > 0 and TotalSalesQuantity > 0
+
+	Used heatmap to find corelation between numerical data (x data increase/decrease on increase/decrease of  y data)
+	
+	heatmap observations -
+	#PurchasePrice has weak correlations with TotalSalesDollars (-0.012) and GrossProfit (-0.016) → Suggests that variations in purchase price do 	not significantly affect either sales revenue or profit.
+
+	# Strong correlation between total purchase quantity and total sales quantity (0.999) → Indicates a very efficient inventory turnover (i.e., what 	is bought is sold almost entirely).
+
+	#Negative correlation between profit margin & total sales price (-0.179) → Implies that as sales price increases, profit margins decrease, 	possibly due to competitive pricing pressures (e.g., needing to cut margins to remain competitive).
+
+	#StockTurnover has weak negative correlations with both GrossProfit (-0.038) and ProfitMargin (-0.055) → Faster turnover does not necessarily 	mean higher profitability or better margins.
+	
+Step 7 - find solutions for problem statments
+
+#What we want for solution
+
+#1. Brands who need promotion or price adjustment which exibit low sales performance but higher profit margin
+solution - find threshold of both low sales performace and high profit margin and brands between these threshold need promotion or price adjustment
+	
+low_sale_threshold = brand_performance['TotalSalesDollars'].quantile(0.15)
+high_profit_threshold = brand_performance['ProfitMargin'].quantile(0.85)
+
+used scatterplot to see brands between these thresholds
+
+#2. Which vendors and brands demonstrate highest sales performance
+solution - use barplot to see top 10 highest vendors and brands 
+top_vendors = df.groupby('VendorName')["TotalSalesDollars"].sum().nlargest(10)
+
+#3. Which vendors contributed most to total purchase dollar ?
+solution - 
+found purchase contri of all brands
+vendorperformance['PurchaseContri'] = vendorperformance["TotalPurchaseDollars"] / vendorperformance["TotalPurchaseDollars"].sum()*100
+the got top 10 of them
+topvendors = vendorperformance.head(10)
+and ploted on a pie chat for purchase contribution of each vendor in top 10 and remaining as others
+
+#4.Impact of bulk purchase and optimal purchase volume for cost saving
+Divided the purchase quantity into 3 categories small medium and large
+df['OrderSize'] = pd.qcut(df['TotalPurchaseQuantity'],q=3, labels =["Small","Medium","Large"])
+and did grouped sum of unit price  by this purchase size 
+df.groupby('OrderSize')[['UnitPurchasePrice']].mean()
+plotted this info on box plot and found that High the Purchase Quantity (Bulk) less is the average unit price
+so company should encourage buying bulk products to vendors 
+
+#4.Vendors having low inventory turnover, indicating exceess stock and slow moving products
+calculated How much Capital is locked in unsold inventory and which vendors contribute most and also calculated total unsold capital
+
+# Calculate Unsold Inventory Value
+df["UnsoldInventoryValue"] = (df["TotalPurchaseQuantity"] - df["TotalSalesQuantity"]) * df["PurchasePrice"]
+print('Total Unsold Capital:', format_dollars(df["UnsoldInventoryValue"].sum()))
+
+# Aggregate Capital Locked per Vendor
+inventory_value_per_vendor = df.groupby("VendorName")["UnsoldInventoryValue"].sum().reset_index()
+
+# Sort Vendors with the Highest Locked Capital
+inventory_value_per_vendor = inventory_value_per_vendor.sort_values(by="UnsoldInventoryValue", ascending=False)
+inventory_value_per_vendor["UnsoldInventoryValue"] = inventory_value_per_vendor["UnsoldInventoryValue"].apply(format_dollars)
+inventory_value_per_vendor.head(10)
+
+Step 7 - Ploted all the analysis on A dashboard on Tableau 
